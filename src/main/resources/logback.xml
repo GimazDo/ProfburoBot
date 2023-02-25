@@ -1,0 +1,41 @@
+<configuration>
+	<appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+		<encoder>
+			<pattern>%date %-5level %logger{36} - %msg%n</pattern>
+		</encoder>
+	</appender>
+
+	<timestamp key="timestamp" datePattern="yyyy-MM-dd"/>
+<!--	<logger name="discord4j.rest.http.JacksonWriterStrategy" level="TRACE"/>-->
+<!--	<logger name="discord4j.rest.http.JacksonReaderStrategy" level="TRACE"/>-->
+<!--	<logger name="discord4j.rest.request" level="TRACE"/>-->
+	<appender name="FILE" level="DEBUG" class="ch.qos.logback.core.rolling.RollingFileAppender">
+		<file>/opt/log/server.log</file>
+		<rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+			<!--
+              For daily rollover, use 'app_%d.log'.
+              For hourly rollover, use 'app_%d{yyyy-MM-dd_HH}.log'.
+              To GZIP rolled files, replace '.log' with '.log.gz'.
+              To ZIP rolled files, replace '.log' with '.log.zip'.
+            -->
+			<fileNamePattern>/opt/log/integration%d.%i.log.gz</fileNamePattern>
+			<maxFileSize>100MB</maxFileSize>
+			<!-- keep 30 log files worth of history -->
+			<maxHistory>30</maxHistory>
+		</rollingPolicy>
+		<immediateFlush>true</immediateFlush>
+		<encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+			<pattern>%d{dd-MM-yyyy HH:mm:ss.SSS} %level [%thread] %logger{40} %msg%n</pattern>
+		</encoder>
+	</appender>
+
+	<logger name="com.github.gimazdo" level="DEBUG" additivity="false">
+		<appender-ref ref="STDOUT"/>
+		<appender-ref ref="FILE"/>
+	</logger>
+
+	<root level="INFO">
+		<appender-ref ref="STDOUT"/>
+		<appender-ref ref="FILE"/>
+	</root>
+</configuration>
