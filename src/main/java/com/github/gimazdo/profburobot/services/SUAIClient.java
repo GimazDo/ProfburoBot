@@ -1,89 +1,98 @@
 package com.github.gimazdo.profburobot.services;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.gimazdo.profburobot.dto.SUAIUSer;
-import com.github.gimazdo.profburobot.dto.UserInfo;
+import com.github.gimazdo.profburobot.dto.UriAndCookie;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.checkerframework.checker.units.qual.A;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.web.client.RestTemplateBuilder;
-import org.springframework.http.*;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.net.URI;
 import java.util.stream.Collectors;
 
 @Service
 @Slf4j
 public class SUAIClient {
 
-    private static final String LOGIN = "/user/login_check";
-    private static final String MAIN = "/exters/";
-    private static final String LOGIN_REDIRECT = "/login_redirect";
-    private static final String INSIDE = "/inside_s";
-    private static final String GET_INFO = "/getstudentprofile/";
 
-    private final RestTemplate restTemplate;
-
+    //TODO FIX THIS SHIT
+    private static final String INSIDE = "/inside/profile";
+    private final WebClient proGuapClient;
+    private final WebClient authClient;
     public SUAIClient(@Value("${app.suai.url}") String url) {
-        RestTemplateBuilder restTemplateBuilder = new RestTemplateBuilder();
-        this.restTemplate = restTemplateBuilder.rootUri(url).build();
+        authClient = WebClient.builder().baseUrl(url).build();
+        proGuapClient = WebClient.builder().baseUrl(url).build();
     }
 
 
         @SneakyThrows
     public SUAIUSer getUserInfo(String username, String password) {
+            MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+            formData.add("username", username);
+            formData.add("password", password);
+            UriAndCookie uriAndCookie = getAuthUrl();
 
-        HttpEntity<?> requestMain = new HttpEntity<>(null);
+          var response = authClient.post()
+                 .uri(uriAndCookie.getUri())
+                 .contentType(MediaType.MULTIPART_FORM_DATA)
+                 .body(BodyInserters.fromFormData(formData))
+                  .header(HttpHeaders.REFERER, "https://new-pro.guap.ru/")
+                  .header(HttpHeaders.COOKIE, String.join(";", uriAndCookie.getCookie()))
+                 .retrieve()
+                 .toEntity(String.class)
+                  .block();
+        var response2 = authClient.get()
+                .uri(response.getHeaders().getLocation())
+                .retrieve()
+                .toEntity(String.class)
+                .block();
+         var  cookie = response2.getHeaders()
+                    .get(HttpHeaders.SET_COOKIE);
+         Document document = Jsoup.parse(proGuapClient.get().uri(INSIDE).header(HttpHeaders.COOKIE, cookie.stream().collect(Collectors.joining(";"))).retrieve().toEntity(String.class).block().getBody(), "UTF8");
+            Element element = document.select("div").stream().filter(p-> p.className().equals("card-body")).findFirst().get();
+            element.getElementsByTag("h3").get(0).childNode(0);
+            String[] s = element.getElementsByTag("h3").get(0).childNode(0).toString().split(" ");
+            SUAIUSer suaiuSer = new SUAIUSer(
+            );
 
-        ResponseEntity<?> responseMain = restTemplate.exchange(MAIN, HttpMethod.GET, requestMain, String.class);
-        HttpHeaders headers = new HttpHeaders();
-        headers.addAll(HttpHeaders.COOKIE, Objects.requireNonNullElse(responseMain.getHeaders().get(HttpHeaders.SET_COOKIE), new ArrayList<>()));
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-
-        MultiValueMap<String, String> map = new LinkedMultiValueMap<String, String>();
-        map.add("_username", username);
-        map.add("_password", password);
-        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<MultiValueMap<String, String>>(map, headers);
-
-        ResponseEntity<String> response = restTemplate.postForEntity(LOGIN, request, String.class);
-        log.info("{}", response);
-        List<String> cookie = Objects.requireNonNullElse(response.getHeaders().get(HttpHeaders.SET_COOKIE),
-                new ArrayList<String>())
-                .stream()
-                .filter(p-> p.contains("PHP")).collect(Collectors.toList());
-        if (cookie.isEmpty()) {
-            return null;
-        }
-
-        HttpHeaders headers2 = new HttpHeaders();
-        headers2.addAll(HttpHeaders.COOKIE, cookie);
-        HttpEntity<?> request2 = new HttpEntity<>(headers2);
-
-        ResponseEntity<String> response2 = restTemplate.exchange(LOGIN_REDIRECT, HttpMethod.GET, request2, String.class);
-        log.info("{}", response2);
-
-
-        String body = response2.getBody();
-        int s = body.indexOf("window.__initialServerData =") + 29;
-        int s2 = body.indexOf(";", s);
-        body = body.substring(s, s2);
-        ObjectMapper objectMapper = new ObjectMapper();
-        JsonNode jsonNode = objectMapper.readTree(body);
-        jsonNode = jsonNode.get("user");
-        jsonNode = jsonNode.get(0);
-        SUAIUSer suaiuSer = new SUAIUSer();
-        suaiuSer.setFirstname(jsonNode.get("firstname").asText());
-        suaiuSer.setMiddlename(jsonNode.get("middlename").asText());
-        suaiuSer.setLastname(jsonNode.get("lastname").asText());
-        return suaiuSer;
+            suaiuSer.setLastname(s[0]);
+            suaiuSer.setFirstname(s[1]);
+            suaiuSer.setMiddlename(s.length==3?s[2]:null);
+            return suaiuSer;
     }
+
+    public UriAndCookie getAuthUrl(){
+        UriAndCookie uriAndCookie = getAuthFormUrl();
+        ResponseEntity<String> stringResponseEntity = authClient
+                .get()
+                .uri(uriAndCookie.getUri())
+                .retrieve()
+                .toEntity(String.class)
+                .block();
+        Document document = Jsoup.parse(stringResponseEntity.getBody());
+        return new UriAndCookie(URI.create(document.select("form").get(0).attributes().get("action")), stringResponseEntity.getHeaders().get(HttpHeaders.SET_COOKIE));
+    }
+
+    public UriAndCookie getAuthFormUrl(){
+        HttpHeaders httpHeaders = proGuapClient
+                .get()
+                .uri("/oauth/login")
+                .retrieve()
+                .toEntity(String.class)
+                .block()
+                .getHeaders();
+        return new UriAndCookie(httpHeaders.getLocation(), httpHeaders.get(HttpHeaders.SET_COOKIE));
+    }
+
 
 }

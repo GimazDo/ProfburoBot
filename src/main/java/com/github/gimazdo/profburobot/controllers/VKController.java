@@ -33,4 +33,5 @@ public class VKController {
 
         return "ok";
     }
+
 }
