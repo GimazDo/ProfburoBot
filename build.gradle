@@ -30,6 +30,7 @@ dependencies {
     implementation 'se.michaelthelin.spotify:spotify-web-api-java:7.3.0'
 
     implementation 'org.springframework:spring-webflux'
+    implementation 'org.projectlombok:lombok:1.18.22'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

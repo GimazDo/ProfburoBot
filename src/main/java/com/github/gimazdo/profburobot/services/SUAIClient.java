@@ -46,7 +46,7 @@ public class SUAIClient {
                  .uri(uriAndCookie.getUri())
                  .contentType(MediaType.MULTIPART_FORM_DATA)
                  .body(BodyInserters.fromFormData(formData))
-                  .header(HttpHeaders.REFERER, "https://new-pro.guap.ru/")
+                  .header(HttpHeaders.REFERER, "https://pro.guap.ru/")
                   .header(HttpHeaders.COOKIE, String.join(";", uriAndCookie.getCookie()))
                  .retrieve()
                  .toEntity(String.class)
